@@ -1,0 +1,166 @@
+plugins {
+	id "groovy"
+	id "idea"
+}
+
+apply from: "$rootDir/libraries.gradle"
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	testImplementation lib.groovy
+	testImplementation lib.geb
+	testImplementation lib.selenium_java
+
+	testImplementation lib.cucumber_java
+	testImplementation lib.cucumber_junit_platform_engine
+
+	testImplementation platform(lib.junit_bom)
+	testImplementation lib.junit_jupiter
+	testImplementation lib.junit_platform_suite
+}
+
+def configuredGebEnv(String defaultGebEnv = 'chromeHeadless') {
+	(project.findProperty('gebEnv')
+		?: System.getProperty('geb.env')
+		?: defaultGebEnv) as String
+}
+
+def configuredEnvironment() {
+	(project.findProperty('environment')
+		?: System.getProperty('environment')) as String
+}
+
+def configuredRunTags() {
+	(project.findProperty('runTags')
+		?: System.getProperty('cucumber.filter.tags')) as String
+}
+
+def configuredIgnoreTags() {
+	(project.findProperty('ignoreTags')
+		?: System.getProperty('cucumber.ignore.tags')) as String
+}
+
+def buildTagFilter() {
+	String runTags = configuredRunTags()
+	String ignoreTags = configuredIgnoreTags()
+	if (runTags && ignoreTags) {
+		return "${runTags} and not (${ignoreTags})"
+	} else if (ignoreTags) {
+		return "not (${ignoreTags})"
+	}
+	return runTags
+}
+
+def configuredParallelForks() {
+	(project.findProperty('parallelForks')
+		?: System.getProperty('cucumber.execution.parallel.config.fixed.parallelism')) as String
+}
+
+def configuredCucumberPlugins(boolean parallel) {
+	List<String> plugins = ['pretty', 'usage:build/reports/cucumber/usage.json']
+	if (parallel) {
+		plugins << 'timeline:build/reports/cucumber/timeline'
+	}
+	plugins += [
+		'html:build/reports/cucumber/report.html',
+		'json:build/reports/cucumber/cucumber.json',
+		'rerun:build/reports/cucumber/failed.txt'
+	]
+	plugins.join(',')
+}
+
+def failedScenariosFile() {
+	file("$buildDir/reports/cucumber/failed.txt")
+}
+
+def failedScenarioEntries() {
+	File failedFile = failedScenariosFile()
+	if (!failedFile.exists()) {
+		return []
+	}
+	failedFile.readLines()
+		.collect { it.trim() }
+		.findAll { !it.isEmpty() }
+}
+
+def configureAcceptanceTask = { Test testTask, boolean parallel, String defaultGebEnv ->
+	testTask.useJUnitPlatform {
+		excludeEngines('cucumber')
+	}
+	testTask.testClassesDirs = sourceSets.test.output.classesDirs
+	testTask.classpath = sourceSets.test.runtimeClasspath
+
+	testTask.doFirst {
+		String gebEnv = configuredGebEnv(defaultGebEnv)
+		if (gebEnv) {
+			testTask.systemProperty 'geb.env', gebEnv
+		}
+		testTask.systemProperty 'cucumber.plugin', configuredCucumberPlugins(parallel)
+
+		String environment = configuredEnvironment()
+		if (environment != null) {
+			testTask.systemProperty 'environment', environment
+		}
+
+		if (parallel) {
+			testTask.systemProperty 'cucumber.execution.parallel.enabled', 'true'
+			testTask.systemProperty 'cucumber.execution.parallel.config.strategy', 'fixed'
+			testTask.systemProperty 'cucumber.execution.parallel.config.fixed.parallelism', configuredParallelForks() ?: '2'
+			delete "$buildDir/reports/cucumber/timeline"
+		}
+
+		List<String> failedEntries = failedScenarioEntries()
+		if (!failedEntries.isEmpty()) {
+			testTask.systemProperty 'cucumber.features', failedEntries.join(',')
+			testTask.systemProperty 'cucumber.filter.tags', ''
+			logger.quiet("[ Re-running failed scenarios from ${failedScenariosFile().absolutePath} ]")
+		} else {
+			String tagFilter = buildTagFilter()
+			testTask.systemProperty 'cucumber.filter.tags', tagFilter ?: ''
+		}
+	}
+
+	testTask.testLogging {
+		events "passed", "skipped", "failed"
+		exceptionFormat "full"
+	}
+}
+
+tasks.named('test', Test) {
+	configureAcceptanceTask(it, false, null)
+}
+
+tasks.register('printCucumberReportLocation') {
+	group = 'verification'
+	description = 'Prints the generated Cucumber report locations.'
+	doLast {
+		File reportFile = file("$buildDir/reports/cucumber/report.html")
+		if (reportFile.exists()) {
+			println "Cucumber report: ${reportFile.toURI()}"
+		} else {
+			println "Cucumber report file not found: ${reportFile.absolutePath}"
+		}
+
+		File timelineIndex = file("$buildDir/reports/cucumber/timeline/index.html")
+		if (timelineIndex.exists()) {
+			println "Cucumber timeline: ${timelineIndex.toURI()}"
+		}
+	}
+}
+
+tasks.register('runAcceptPortal', Test) {
+	group = 'verification'
+	description = 'Run portal acceptance tests with simplified project properties.'
+	configureAcceptanceTask(it, false, 'chrome')
+	finalizedBy(tasks.named('printCucumberReportLocation'))
+}
+
+tasks.register('runAcceptPortalParallel', Test) {
+	group = 'verification'
+	description = 'Run portal acceptance tests in parallel with -PparallelForks and optional -PrunTags.'
+	configureAcceptanceTask(it, true, 'chrome')
+	finalizedBy(tasks.named('printCucumberReportLocation'))
+}
