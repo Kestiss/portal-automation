@@ -21,7 +21,8 @@ class PageResolver {
     }
 
     static boolean isDirectlyOpenable(Class<? extends Page> pageClass) {
-        pageClass.simpleName in ['HomePage', 'WallpapersPage']
+        String url = pageClass.metaClass.getMetaProperty('url')?.getProperty(null)
+        url && !url.startsWith('^')
     }
 
     private static String toUpperCamelCase(String text) {
