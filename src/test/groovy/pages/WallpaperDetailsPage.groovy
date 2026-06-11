@@ -9,8 +9,8 @@ class WallpaperDetailsPage extends BasePage {
 
     static at = {
         browser.currentUrl.matches(atUrl)
-        expectElements()
         dismissVignetteIfNeeded()
+        expectElements()
     }
 
     static content = {
