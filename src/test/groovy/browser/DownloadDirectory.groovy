@@ -6,25 +6,31 @@ import java.time.Duration
 
 class DownloadDirectory {
 
-    private static final Path DOWNLOAD_DIR = Path.of(System.getProperty('java.io.tmpdir'), 'portal-downloads')
+    private static final Path ROOT_DIR = Path.of(System.getProperty('java.io.tmpdir'), 'portal-downloads')
+
+    private static Path threadDir() {
+        ROOT_DIR.resolve(Thread.currentThread().id as String)
+    }
 
     static String getAbsolutePath() {
-        DOWNLOAD_DIR.toAbsolutePath().toString()
+        threadDir().toAbsolutePath().toString()
     }
 
     static void reset() {
-        Files.createDirectories(DOWNLOAD_DIR)
+        Path dir = threadDir()
+        Files.createDirectories(dir)
         List<Path> paths = []
-        Files.list(DOWNLOAD_DIR).withCloseable { stream ->
+        Files.list(dir).withCloseable { stream ->
             paths.addAll(stream.toList())
         }
         paths.each { Files.deleteIfExists(it) }
     }
 
     static Set<String> snapshot() {
-        Files.createDirectories(DOWNLOAD_DIR)
+        Path dir = threadDir()
+        Files.createDirectories(dir)
         Set<String> fileNames = [] as Set
-        Files.list(DOWNLOAD_DIR).withCloseable { stream ->
+        Files.list(dir).withCloseable { stream ->
             fileNames.addAll(stream
                     .filter { Files.isRegularFile(it) }
                     .map { it.fileName.toString() }
@@ -40,7 +46,7 @@ class DownloadDirectory {
             if (candidate != null && isStable(candidate)) {
                 return candidate
             }
-            sleep(1000)
+            sleep(500)
         }
 
         throw new AssertionError("No new completed download found in ${absolutePath} within ${timeout.seconds} seconds")
@@ -48,7 +54,7 @@ class DownloadDirectory {
 
     private static Path findCompletedDownload(Set<String> previousFiles) {
         List<Path> files = []
-        Files.list(DOWNLOAD_DIR).withCloseable { stream ->
+        Files.list(threadDir()).withCloseable { stream ->
             files.addAll(stream
                     .filter { Files.isRegularFile(it) }
                     .filter { !previousFiles.contains(it.fileName.toString()) }
@@ -64,7 +70,7 @@ class DownloadDirectory {
         }
 
         long firstSize = Files.size(file)
-        sleep(1000)
+        sleep(500)
         Files.exists(file) && Files.size(file) == firstSize
     }
 }
