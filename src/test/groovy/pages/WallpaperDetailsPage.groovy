@@ -5,10 +5,10 @@ import pages.modules.DownloadPopupModule
 
 class WallpaperDetailsPage extends BasePage {
 
-    static String url = urlPattern("/wallpapers/[0-9a-f-]+/?(\\?.*)?")
+    static String atUrl = urlPattern("/wallpapers/[0-9a-f-]+/?(\\?.*)?")
 
     static at = {
-        browser.currentUrl.matches(url)
+        browser.currentUrl.matches(atUrl)
         expectElements()
         dismissVignetteIfNeeded()
     }

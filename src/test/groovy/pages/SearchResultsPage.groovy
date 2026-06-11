@@ -4,11 +4,11 @@ import pages.modules.WallpaperCardModule
 
 class SearchResultsPage extends BasePage {
 
-    static String url = urlPattern("/find/[^?#/]+/?(\\?.*)?")
+    static String atUrl = urlPattern("/find/[^?#/]+/?(\\?.*)?")
 
     static at = {
         dismissVignetteIfNeeded()
-        browser.currentUrl.matches(url)
+        browser.currentUrl.matches(atUrl)
         expectElements()
     }
 
