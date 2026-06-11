@@ -70,7 +70,7 @@ class DownloadDirectory {
         }
 
         long firstSize = Files.size(file)
-        sleep(500)
+        sleep(1000)
         Files.exists(file) && Files.size(file) == firstSize
     }
 }
