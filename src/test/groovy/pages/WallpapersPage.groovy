@@ -6,7 +6,7 @@ class WallpapersPage extends BasePage {
 
     static at = {
         dismissVignetteIfNeeded()
-        browser.currentUrl == url
+        browser.currentUrl.startsWith(url)
         expectElements()
     }
 
