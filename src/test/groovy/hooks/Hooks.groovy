@@ -29,6 +29,7 @@ class Hooks {
             }
         } finally {
             BrowserManager.quitBrowser()
+            DownloadDirectory.reset()
         }
     }
 }
