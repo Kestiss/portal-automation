@@ -1,6 +1,7 @@
 package hooks
 
 import browser.BrowserManager
+import browser.DownloadDirectory
 import geb.Browser
 import io.cucumber.java.After
 import io.cucumber.java.Before
@@ -13,6 +14,7 @@ class Hooks {
 
     @Before
     void beforeScenario() {
+        DownloadDirectory.reset()
         BrowserManager.browser
     }
 

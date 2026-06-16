@@ -7,36 +7,29 @@ import java.time.Duration
 class DownloadDirectory {
 
     private static final Path ROOT_DIR = Path.of(System.getProperty('java.io.tmpdir'), 'portal-downloads')
+    private static final Set<String> IN_PROGRESS_EXTENSIONS = ['.crdownload', '.part'] as Set
 
-    private static Path threadDir() {
-        ROOT_DIR.resolve(Thread.currentThread().id as String)
+    private static Path ensureThreadDir() {
+        Files.createDirectories(ROOT_DIR.resolve(Thread.currentThread() as String))
     }
 
     static String getAbsolutePath() {
-        threadDir().toAbsolutePath().toString()
+        ensureThreadDir().toString()
     }
 
     static void reset() {
-        Path dir = threadDir()
-        Files.createDirectories(dir)
-        List<Path> paths = []
+        Path dir = ensureThreadDir()
         Files.list(dir).withCloseable { stream ->
-            paths.addAll(stream.toList())
+            stream.filter { Files.isRegularFile(it) }.forEach { Files.deleteIfExists(it) }
         }
-        paths.each { Files.deleteIfExists(it) }
     }
 
     static Set<String> snapshot() {
-        Path dir = threadDir()
-        Files.createDirectories(dir)
-        Set<String> fileNames = [] as Set
-        Files.list(dir).withCloseable { stream ->
-            fileNames.addAll(stream
-                    .filter { Files.isRegularFile(it) }
-                    .map { it.fileName.toString() }
-                    .toList())
+        Set<String> names = [] as Set
+        Files.list(ensureThreadDir()).withCloseable { stream ->
+            names.addAll(stream.filter { Files.isRegularFile(it) }.map { it.fileName.toString() }.toList())
         }
-        fileNames
+        names
     }
 
     static Path waitForNewDownload(Set<String> previousFiles, Duration timeout = Duration.ofSeconds(60)) {
@@ -46,31 +39,27 @@ class DownloadDirectory {
             if (candidate != null && isStable(candidate)) {
                 return candidate
             }
-            sleep(500)
         }
-
         throw new AssertionError("No new completed download found in ${absolutePath} within ${timeout.seconds} seconds")
     }
 
     private static Path findCompletedDownload(Set<String> previousFiles) {
         List<Path> files = []
-        Files.list(threadDir()).withCloseable { stream ->
+        Files.list(ensureThreadDir()).withCloseable { stream ->
             files.addAll(stream
                     .filter { Files.isRegularFile(it) }
                     .filter { !previousFiles.contains(it.fileName.toString()) }
-                    .filter { !it.fileName.toString().endsWith('.crdownload') }
+                    .filter { !IN_PROGRESS_EXTENSIONS.any { ext -> it.fileName.toString().endsWith(ext) } }
                     .toList())
         }
-        files ? files.first() : null
+        files ? files.max { Files.getLastModifiedTime(it) } : null
     }
 
     private static boolean isStable(Path file) {
-        if (!Files.exists(file) || Files.size(file) == 0L) {
-            return false
+        try {
+            Files.size(file) > 0L
+        } catch (IOException ignored) {
+            false
         }
-
-        long firstSize = Files.size(file)
-        sleep(1000)
-        Files.exists(file) && Files.size(file) == firstSize
     }
 }
